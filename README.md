@@ -1,3 +1,35 @@
+# M1-SOC-ACE-Driver
+
+A fork of [Kobra-S1/ACEPRO](https://github.com/Kobra-S1/ACEPRO) for the Artillery M1 Pro
+running mainline Klipper, maintained by XateEsix (Peritus X). It is the driver behind the
+ACE Pro setup in [M1-SOC-Printer-Config](https://github.com/xateesix/M1-SOC-Printer-Config).
+The upstream README follows below, unchanged.
+
+**Lineage:** [DuckACE](https://github.com/utkabobr/DuckACE) (utkabobr) →
+[ACEPROSV08](https://github.com/szkrisz/ACEPROSV08) (szkrisz) →
+[Kobra-S1/ACEPRO](https://github.com/Kobra-S1/ACEPRO) → this fork. The ACE temperature
+sensor comes from [agrloki/ValgACE](https://github.com/agrloki/ValgACE) and `virtual_pins`
+is by Pedro Lamas.
+
+**What this fork adds** (branched from upstream `dev` at `0b187c7`, 2026-10-22):
+
+- `extras/filament_adc_sensor.py`: an analog filament sensor exposed as a
+  `filament_switch_sensor`, for a toolhead sensor that is read through an ADC pin.
+- `ace_connected` in the `ace` status object and `connected` in each `ace_instance_N`, the
+  live USB link state, so G-code macros can skip ACE steps while the ACE is unplugged.
+- `extruder_engage_length`, `extruder_engage_speed`, `extruder_engage_chunk` and
+  `extruder_engage_max_length` in `[ace]`: for a toolhead sensor that sits past the extruder
+  gears, the extruder turns in step with the ACE once `extruder_engage_length` mm have been
+  fed, holding the feed to heat the nozzle first if it is cold. Off by default (0).
+
+Every change is in the git history (`git log upstream/dev..`), as the GPL requires.
+
+**License:** GNU General Public License v3.0, see [LICENSE](LICENSE). The original
+copyright notices stay with their authors; changes in this fork are Copyright (C) 2026
+XateEsix under the same license.
+
+---
+
 <div align="center">
 
 # ACE Pro / ACE2 Pro - A Klipper driver for the Anycubic Color Engine Pro (1+2)
