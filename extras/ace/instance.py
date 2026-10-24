@@ -40,6 +40,12 @@ class AceInstance:
     DEFAULT_COLOR = [0, 0, 0]
     DEFAULT_TEMP = 0
 
+    # Extruder engagement during the load feed (0 = off, the ACE feeds alone)
+    extruder_engage_length = 0.0
+    extruder_engage_speed = 0.0
+    extruder_engage_chunk = 5.0
+    extruder_engage_max_length = 400.0
+
     # Feed assist restore retries: a freshly powered ACE spends time in RFID
     # identification (busy) - retry once per heartbeat (~1 Hz) up to this cap
     FEED_ASSIST_RESTORE_MAX_ATTEMPTS = 30
@@ -121,6 +127,10 @@ class AceInstance:
         self.incremental_feeding_speed = float(ace_config["incremental_feeding_speed"])
         self.extruder_feeding_length = float(ace_config["extruder_feeding_length"])
         self.extruder_feeding_speed = float(ace_config["extruder_feeding_speed"])
+        self.extruder_engage_length = float(ace_config["extruder_engage_length"])
+        self.extruder_engage_speed = float(ace_config["extruder_engage_speed"])
+        self.extruder_engage_chunk = float(ace_config["extruder_engage_chunk"])
+        self.extruder_engage_max_length = float(ace_config["extruder_engage_max_length"])
         self.toolhead_slow_loading_speed = float(ace_config["toolhead_slow_loading_speed"])
         self.heartbeat_interval = float(ace_config["heartbeat_interval"])
         self.max_dryer_temperature = float(ace_config["max_dryer_temperature"])
@@ -999,8 +1009,16 @@ class AceInstance:
         expected_time = feed_length / feed_speed
         timeout_s = expected_time * self.timeout_multiplier
 
-        # Coordinated extruder nudges during ACE feed
         start_time = time.time()
+        # The toolhead sensor can sit past the extruder gears, which the ACE cannot
+        # push through. After extruder_engage_length mm of ACE feed (estimated from
+        # speed and time) the extruder turns in step with it until the sensor trips.
+        engage_after = self.extruder_engage_length
+        engage_speed = self.extruder_engage_speed or feed_speed
+        engaged = False
+        engaged_moved = 0.0
+        segment_start = start_time
+        fed_before = 0.0
 
         while not self.manager.get_switch_state(SENSOR_TOOLHEAD):
             now = time.time()
@@ -1021,6 +1039,41 @@ class AceInstance:
                     f"ACE[{self.instance_num}]: Feed timeout for {feed_length}mm after {timeout_s} seconds"
                 )
                 break
+            if engage_after > 0:
+                fed = fed_before + (now - segment_start) * feed_speed
+                if fed >= engage_after:
+                    if not engaged:
+                        engaged = True
+                        self.gcode.respond_info(
+                            f"ACE[{self.instance_num}]: Filament about {fed:.0f}mm "
+                            f"along, turning the extruder with the ACE"
+                        )
+                        if not self._extruder_can_extrude():
+                            # A cold extruder refuses to turn: hold the feed, heat, resume.
+                            self._stop_feed(local_slot)
+                            self._heat_extruder_for_engage()
+                            fed_before = fed
+                            self.execute_feed_with_retries(
+                                local_slot, feed_length - fed_before, feed_speed
+                            )
+                            segment_start = time.time()
+                            # Heating time must not eat the sensor timeout.
+                            start_time += segment_start - now
+                            continue
+                    if engaged_moved >= self.extruder_engage_max_length:
+                        self.gcode.respond_info(
+                            f"ACE[{self.instance_num}]: Extruder turned "
+                            f"{engaged_moved:.0f}mm without the toolhead sensor "
+                            f"triggering, giving up on the coordinated feed"
+                        )
+                        break
+                    # Short moves keep the sensor check, and the stop, within a few mm.
+                    self._extruder_move(
+                        self.extruder_engage_chunk, engage_speed,
+                        wait_for_move_end=True,
+                    )
+                    engaged_moved += self.extruder_engage_chunk
+                    continue
             self.dwell(0.1)
 
         # Final sanity check
@@ -1086,6 +1139,20 @@ class AceInstance:
         # deadlock on ACE2.
 
         return self.extruder_feeding_length
+
+    def _extruder_can_extrude(self):
+        extruder = self.printer.lookup_object('toolhead').get_extruder()
+        return bool(extruder.get_heater().can_extrude)
+
+    def _heat_extruder_for_engage(self):
+        """Heat to the current target (or just above the minimum) and wait."""
+        heater = self.printer.lookup_object('toolhead').get_extruder().get_heater()
+        temp = heater.target_temp or (heater.min_extrude_temp + 5)
+        self.gcode.respond_info(
+            f"ACE[{self.instance_num}]: Extruder too cold to turn, heating to "
+            f"{temp:.0f}C before continuing the feed"
+        )
+        self.gcode.run_script_from_command(f"M109 S{temp:.0f}")
 
     def execute_feed_with_retries(self, local_slot, feed_length, feed_speed):
         max_retries = MAX_RETRIES

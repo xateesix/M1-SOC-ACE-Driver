@@ -160,6 +160,14 @@ def read_ace_config(config):
     ace_config["toolhead_slow_loading_speed"] = config.getint("toolhead_slow_loading_speed", 5)
     ace_config["extruder_feeding_length"] = config.getint("extruder_feeding_length", 1)
     ace_config["extruder_feeding_speed"] = config.getint("extruder_feeding_speed", 5)
+    # Turn the extruder with the ACE once this many mm have been fed (0 = never).
+    # For printers whose toolhead sensor is past the extruder gears.
+    ace_config["extruder_engage_length"] = config.getfloat("extruder_engage_length", 0.0, minval=0.0)
+    # Extruder speed for that phase in mm/s; 0 uses feed_speed.
+    ace_config["extruder_engage_speed"] = config.getfloat("extruder_engage_speed", 0.0, minval=0.0)
+    ace_config["extruder_engage_chunk"] = config.getfloat("extruder_engage_chunk", 5.0, above=0.0)
+    # Give up after the extruder has turned this many mm without the sensor tripping.
+    ace_config["extruder_engage_max_length"] = config.getfloat("extruder_engage_max_length", 400.0, above=0.0)
     ace_config["timeout_multiplier"] = config.getint("timeout_multiplier", 2)
     ace_config["default_color_change_purge_length"] = config.getint("default_color_change_purge_length", "50")
     ace_config["default_color_change_purge_speed"] = config.getint("default_color_change_purge_speed", "400")
