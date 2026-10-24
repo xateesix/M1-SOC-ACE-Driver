@@ -2423,6 +2423,12 @@ class AceInstance:
         status["protocol"] = self.protocol_name
         status["rfid_sync_enabled"] = bool(self.rfid_inventory_sync_enabled)
         status["feed_assist_slot"] = self._get_current_feed_assist_index()
+        # Live USB link state so macros can skip ACE steps when it is unplugged
+        # (printer.ace_instance_N.connected); _info alone goes stale on unplug.
+        try:
+            status["connected"] = bool(self.serial_mgr.is_connected())
+        except Exception:
+            status["connected"] = False
 
         # Attach device info from last get_info response, if available
         device_info = getattr(self.serial_mgr, "device_info", {})

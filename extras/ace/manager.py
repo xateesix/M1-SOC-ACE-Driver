@@ -3099,6 +3099,13 @@ class AceManager:
 
     # ========== Status and Reporting ==========
 
+    @staticmethod
+    def _instance_connected(instance):
+        try:
+            return bool(instance.serial_mgr.is_connected())
+        except Exception:
+            return False
+
     def get_status(self, eventtime=None):
         try:
             # Sensor states: True/False when sensor is registered, None when unavailable.
@@ -3123,6 +3130,10 @@ class AceManager:
                     "ace_endless_spool_match_mode", "exact"
                 ),
                 "ace_pro_enabled": bool(self._ace_pro_enabled),
+                # True when at least one ACE has a live USB link (macro presence test)
+                "ace_connected": any(
+                    self._instance_connected(i) for i in self.instances
+                ),
                 "toolhead_sensor": toolhead_sensor,
                 "rdm_sensor": rdm_sensor,
             }
